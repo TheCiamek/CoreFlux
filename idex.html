@@ -1011,5 +1011,434 @@
   }, { threshold: 0.12 });
   reveals.forEach(el => observer.observe(el));
 </script>
+
+<!-- CHATBOT WIDGET -->
+<style>
+  /* BUBBLE */
+  #cf-bubble {
+    position: fixed;
+    bottom: 32px; right: 32px;
+    width: 58px; height: 58px;
+    background: var(--gold);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    cursor: none;
+    z-index: 500;
+    box-shadow: 0 4px 24px rgba(201,168,76,0.35);
+    transition: transform 0.3s, box-shadow 0.3s;
+  }
+  #cf-bubble:hover { transform: scale(1.08); box-shadow: 0 6px 32px rgba(201,168,76,0.5); }
+  #cf-bubble svg { width: 26px; height: 26px; stroke: #0a0b0f; fill: none; stroke-width: 2; transition: transform 0.3s; }
+  #cf-bubble.open svg { transform: rotate(45deg); }
+  .cf-notif {
+    position: absolute;
+    top: -3px; right: -3px;
+    width: 16px; height: 16px;
+    background: #e05050;
+    border-radius: 50%;
+    border: 2px solid var(--bg);
+    animation: notifPulse 2s infinite;
+  }
+  @keyframes notifPulse {
+    0%,100% { transform: scale(1); }
+    50% { transform: scale(1.2); }
+  }
+
+  /* WINDOW */
+  #cf-window {
+    position: fixed;
+    bottom: 104px; right: 32px;
+    width: 370px;
+    max-height: 560px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    z-index: 499;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+    transform: scale(0.85) translateY(20px);
+    transform-origin: bottom right;
+    opacity: 0;
+    pointer-events: none;
+    transition: transform 0.35s cubic-bezier(.34,1.56,.64,1), opacity 0.3s;
+    clip-path: polygon(12px 0%, 100% 0%, 100% 100%, 0% 100%, 0% 12px);
+  }
+  #cf-window.open {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  /* HEADER */
+  .cf-header {
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--border2);
+    display: flex; align-items: center; gap: 12px;
+    background: var(--bg3);
+  }
+  .cf-avatar {
+    width: 38px; height: 38px;
+    background: var(--gold-dim);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .cf-avatar svg { width: 18px; height: 18px; stroke: var(--gold); fill: none; stroke-width: 1.5; }
+  .cf-header-text h4 {
+    font-size: 0.88rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    margin-bottom: 2px;
+  }
+  .cf-header-text h4 span { color: var(--gold); }
+  .cf-status {
+    font-size: 0.7rem;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .cf-status::before {
+    content: '';
+    width: 6px; height: 6px;
+    background: #4caf6e;
+    border-radius: 50%;
+    display: inline-block;
+    animation: blink 2s infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* MESSAGES */
+  #cf-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    scroll-behavior: smooth;
+  }
+  #cf-messages::-webkit-scrollbar { width: 4px; }
+  #cf-messages::-webkit-scrollbar-track { background: transparent; }
+  #cf-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .cf-msg {
+    max-width: 88%;
+    font-size: 0.86rem;
+    line-height: 1.65;
+    padding: 12px 16px;
+    border-radius: 2px;
+    animation: msgIn 0.3s ease;
+  }
+  @keyframes msgIn { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform:translateY(0); } }
+  .cf-msg.bot {
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-left: 2px solid var(--gold);
+    color: var(--white);
+    align-self: flex-start;
+  }
+  .cf-msg.user {
+    background: var(--gold-dim);
+    border: 1px solid var(--border);
+    color: var(--white);
+    align-self: flex-end;
+    text-align: right;
+  }
+  .cf-typing {
+    display: flex; gap: 5px; align-items: center;
+    padding: 14px 16px;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-left: 2px solid var(--gold);
+    align-self: flex-start;
+    border-radius: 2px;
+    animation: msgIn 0.3s ease;
+  }
+  .cf-typing span {
+    width: 6px; height: 6px;
+    background: var(--gold);
+    border-radius: 50%;
+    animation: typingDot 1.2s infinite;
+  }
+  .cf-typing span:nth-child(2) { animation-delay: 0.2s; }
+  .cf-typing span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes typingDot { 0%,60%,100%{transform:translateY(0);opacity:0.4} 30%{transform:translateY(-5px);opacity:1} }
+
+  /* LEAD FORM */
+  .cf-lead-form {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-left: 2px solid var(--gold);
+    padding: 16px;
+    align-self: flex-start;
+    width: 100%;
+    max-width: 88%;
+    animation: msgIn 0.3s ease;
+  }
+  .cf-lead-form p {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-bottom: 12px;
+    font-family: 'DM Mono', monospace;
+    letter-spacing: 0.05em;
+  }
+  .cf-lead-form input, .cf-lead-form textarea {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border2);
+    color: var(--white);
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.82rem;
+    padding: 9px 12px;
+    margin-bottom: 8px;
+    outline: none;
+    transition: border-color 0.3s;
+    resize: none;
+  }
+  .cf-lead-form input:focus, .cf-lead-form textarea:focus { border-color: var(--gold); }
+  .cf-lead-form textarea { min-height: 60px; }
+  .cf-lead-form button {
+    width: 100%;
+    background: var(--gold);
+    color: var(--bg);
+    border: none;
+    padding: 10px;
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    cursor: none;
+    transition: background 0.3s;
+  }
+  .cf-lead-form button:hover { background: var(--gold2); }
+
+  /* INPUT */
+  .cf-input-row {
+    padding: 14px 14px;
+    border-top: 1px solid var(--border2);
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+    background: var(--bg3);
+  }
+  #cf-input {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border2);
+    color: var(--white);
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.86rem;
+    padding: 10px 14px;
+    outline: none;
+    resize: none;
+    min-height: 40px;
+    max-height: 100px;
+    transition: border-color 0.3s;
+    border-radius: 0;
+    line-height: 1.5;
+  }
+  #cf-input:focus { border-color: var(--gold); }
+  #cf-input::placeholder { color: var(--muted); }
+  #cf-send {
+    width: 40px; height: 40px;
+    background: var(--gold);
+    border: none;
+    cursor: none;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.3s;
+    clip-path: polygon(4px 0%, 100% 0%, calc(100% - 4px) 100%, 0% 100%);
+  }
+  #cf-send:hover { background: var(--gold2); }
+  #cf-send svg { width: 16px; height: 16px; stroke: var(--bg); fill: none; stroke-width: 2; }
+
+  @media (max-width: 480px) {
+    #cf-window { width: calc(100vw - 32px); right: 16px; bottom: 90px; }
+    #cf-bubble { right: 16px; bottom: 20px; }
+  }
+</style>
+
+<div id="cf-bubble" onclick="cfToggle()">
+  <div class="cf-notif"></div>
+  <svg viewBox="0 0 24 24" id="cf-bubble-icon">
+    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+  </svg>
+</div>
+
+<div id="cf-window">
+  <div class="cf-header">
+    <div class="cf-avatar">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+    </div>
+    <div class="cf-header-text">
+      <h4>Asystent <span>Coreflux</span></h4>
+      <div class="cf-status">Online — odpowiada natychmiast</div>
+    </div>
+  </div>
+  <div id="cf-messages"></div>
+  <div class="cf-input-row">
+    <textarea id="cf-input" placeholder="Napisz wiadomość..." rows="1"></textarea>
+    <button id="cf-send" onclick="cfSend()">
+      <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+    </button>
+  </div>
+</div>
+
+<script>
+(function() {
+  const SYSTEM = `Jesteś profesjonalnym asystentem sprzedaży firmy Coreflux — mikro-agencji specjalizującej się w automatyzacji procesów biznesowych B2B oraz wdrażaniu chatbotów i asystentów AI dla firm.
+
+Twoje zadania:
+1. Odpowiadaj na pytania o usługi Coreflux (automatyzacja procesów, chatboty AI, integracje systemów)
+2. Zbieraj dane kontaktowe od zainteresowanych klientów (imię, email, opis problemu/potrzeby)
+
+Usługi Coreflux:
+- Automatyzacja procesów biznesowych: automatyczne faktury, raporty, maile, integracje CRM/ERP, przepływy dokumentów
+- Chatboty AI i asystenci: obsługa klienta 24/7, zbieranie leadów, integracje WhatsApp/Messenger/Slack, white-label
+- Wdrożenie w 48-96 godzin
+- Technologie: Make.com, Zapier, n8n, OpenAI API, Node.js, Python
+- Kontakt: hello@coreflux.pl
+
+Zasady komunikacji:
+- Mów po polsku, profesjonalnie ale przyjaźnie
+- Bądź konkretny i zwięzły (max 3-4 zdania na odpowiedź)
+- Jeśli ktoś jest zainteresowany — poproś o dane: imię, email i krótki opis co chce zautomatyzować
+- Gdy zbierzesz dane, potwierdź że ktoś z zespołu odezwie się w ciągu 24h
+- Nie wymyślaj cen — powiedz że wycena jest indywidualna i bezpłatna
+- Nie używaj markdown ani gwiazdek w odpowiedziach`;
+
+  let history = [];
+  let leadCollected = false;
+  let isOpen = false;
+  let initialized = false;
+
+  window.cfToggle = function() {
+    isOpen = !isOpen;
+    document.getElementById('cf-window').classList.toggle('open', isOpen);
+    document.getElementById('cf-bubble').classList.toggle('open', isOpen);
+    document.querySelector('.cf-notif').style.display = 'none';
+    if (isOpen && !initialized) {
+      initialized = true;
+      setTimeout(() => cfBotMessage('Cześć! 👋 Jestem asystentem Coreflux. Mogę opowiedzieć Ci o naszych usługach automatyzacji i chatbotów AI, albo pomóc umówić bezpłatną konsultację. W czym mogę pomóc?'), 300);
+    }
+  };
+
+  function cfBotMessage(text) {
+    const msgs = document.getElementById('cf-messages');
+    const el = document.createElement('div');
+    el.className = 'cf-msg bot';
+    el.textContent = text;
+    msgs.appendChild(el);
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+
+  function cfUserMessage(text) {
+    const msgs = document.getElementById('cf-messages');
+    const el = document.createElement('div');
+    el.className = 'cf-msg user';
+    el.textContent = text;
+    msgs.appendChild(el);
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+
+  function cfShowTyping() {
+    const msgs = document.getElementById('cf-messages');
+    const el = document.createElement('div');
+    el.className = 'cf-typing';
+    el.id = 'cf-typing-indicator';
+    el.innerHTML = '<span></span><span></span><span></span>';
+    msgs.appendChild(el);
+    msgs.scrollTop = msgs.scrollHeight;
+    return el;
+  }
+
+  function cfShowLeadForm() {
+    const msgs = document.getElementById('cf-messages');
+    const form = document.createElement('div');
+    form.className = 'cf-lead-form';
+    form.innerHTML = `
+      <p>ZOSTAW DANE — ODDZWONIMY</p>
+      <input type="text" id="cf-lead-name" placeholder="Imię i nazwisko" />
+      <input type="email" id="cf-lead-email" placeholder="Adres e-mail" />
+      <textarea id="cf-lead-desc" placeholder="Co chcesz zautomatyzować? (opcjonalnie)"></textarea>
+      <button onclick="cfSubmitLead()">Wyślij zgłoszenie →</button>
+    `;
+    msgs.appendChild(form);
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+
+  window.cfSubmitLead = function() {
+    const name = document.getElementById('cf-lead-name')?.value?.trim();
+    const email = document.getElementById('cf-lead-email')?.value?.trim();
+    const desc = document.getElementById('cf-lead-desc')?.value?.trim();
+    if (!name || !email) {
+      alert('Podaj imię i email.');
+      return;
+    }
+    // Remove form
+    document.querySelector('.cf-lead-form')?.remove();
+    leadCollected = true;
+    cfUserMessage(`${name} — ${email}${desc ? ' — ' + desc : ''}`);
+    history.push({ role: 'user', content: `Moje dane: Imię: ${name}, Email: ${email}${desc ? ', Opis: ' + desc : ''}` });
+    const typing = cfShowTyping();
+    callClaude().then(reply => {
+      typing.remove();
+      cfBotMessage(reply);
+    });
+  };
+
+  window.cfSend = async function() {
+    const input = document.getElementById('cf-input');
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    input.style.height = 'auto';
+    cfUserMessage(text);
+    history.push({ role: 'user', content: text });
+    const typing = cfShowTyping();
+    const reply = await callClaude();
+    typing.remove();
+    cfBotMessage(reply);
+
+    // Heuristic: if reply mentions leaving contact details, show form
+    const triggerWords = ['zostaw', 'dane', 'imię', 'email', 'formularz', 'kontakt', 'skontaktuj'];
+    if (!leadCollected && triggerWords.some(w => reply.toLowerCase().includes(w))) {
+      setTimeout(cfShowLeadForm, 600);
+    }
+  };
+
+  // Auto-resize textarea
+  document.getElementById('cf-input').addEventListener('input', function() {
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 100) + 'px';
+  });
+  document.getElementById('cf-input').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); cfSend(); }
+  });
+
+  async function callClaude() {
+    try {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1000,
+          system: SYSTEM,
+          messages: history
+        })
+      });
+      const data = await response.json();
+      const reply = data.content?.[0]?.text || 'Przepraszam, wystąpił błąd. Napisz do nas na hello@coreflux.pl';
+      history.push({ role: 'assistant', content: reply });
+      return reply;
+    } catch(e) {
+      return 'Przepraszam, coś poszło nie tak. Napisz do nas bezpośrednio: hello@coreflux.pl';
+    }
+  }
+})();
+</script>
+
 </body>
 </html>
